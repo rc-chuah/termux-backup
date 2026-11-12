@@ -31,10 +31,6 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    ```bash
    git clone https://github.com/rc-chuah/termux-backup
    ```
-   Or
-   ```bash
-   git clone https://github.com/RaynerSec/termux-backup
-   ```
 3. Change directory:
    ```bash
    cd termux-backup
@@ -58,21 +54,12 @@ A Rust program to backup and restore your Termux home and sysroot directories.
 - Backups are stored at `/storage/emulated/0/termux/backups`.
 - The restore process in a normal session will clean the current Termux environment before restoring, keeping only essential core utilities needed for extraction.
 
-## Star History (Mirror 1)
+## Star History
 <a href="https://www.star-history.com/#rc-chuah/termux-backup&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=rc-chuah/termux-backup&type=Date&theme=dark" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=rc-chuah/termux-backup&type=Date" />
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=rc-chuah/termux-backup&type=Date" />
- </picture>
-</a>
-
-## Star History (Mirror 2)
-<a href="https://www.star-history.com/#RaynerSec/termux-backup&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=RaynerSec/termux-backup&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=RaynerSec/termux-backup&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=RaynerSec/termux-backup&type=Date" />
  </picture>
 </a>
 
