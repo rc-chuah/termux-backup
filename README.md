@@ -1,6 +1,12 @@
 # termux-backup
 A Rust program to backup and restore your Termux home and sysroot directories.
 
+## Download Counter
+<p align="left">
+<a href="https://github.com/rc-chuah/termux-backup/releases/latest"><img alt="GitHub all releases" src="https://img.shields.io/github/downloads/rc-chuah/termux-backup/total?label=GITHUB%20DOWNLOADS&style=for-the-badge&color=brightgreen"></a>
+<a href="https://crates.io/crates/termux-backup"><img alt="Crates.io - Downloads" src="https://img.shields.io/crates/d/termux-backup?label=CRATES.IO%20DOWNLOADS&style=for-the-badge&color=brightgreen"></a>
+</p>
+
 ## Usage
 ### How To Use termux-backup
 
