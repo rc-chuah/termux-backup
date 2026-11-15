@@ -1,0 +1,256 @@
+name: Build & Analyze
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - .github/workflows/build.yml
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - .github/workflows/build.yml
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+  schedule:
+    # Runs every Sunday at 11:38 UTC to catch new Clippy lints and security advisories
+    - cron: '38 11 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  build_and_test:
+    name: Build & Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+  build_android:
+    name: Build Android (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - armv7-linux-androideabi
+          - aarch64-linux-android
+          - i686-linux-android
+          - x86_64-linux-android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
+
+      - name: Configure Cargo linker for Android
+        run: |
+          case "${{ matrix.target }}" in
+            armv7-linux-androideabi)
+              LINKER="armv7a-linux-androideabi24-clang"
+              ;;
+            aarch64-linux-android)
+              LINKER="aarch64-linux-android24-clang"
+              ;;
+            i686-linux-android)
+              LINKER="i686-linux-android24-clang"
+              ;;
+            x86_64-linux-android)
+              LINKER="x86_64-linux-android24-clang"
+              ;;
+          esac
+          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]-' '[:upper:]_')
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${LINKER}" >> "$GITHUB_ENV"
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build for Android target
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+  clippy:
+    name: Clippy & Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install SARIF tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: clippy-sarif,sarif-fmt
+
+      - name: Run clippy
+        run: |
+          cargo clippy --all-features --message-format=json -- -D warnings \
+            | clippy-sarif \
+            | tee rust-clippy-results.sarif \
+            | sarif-fmt
+        continue-on-error: true
+
+      - name: Upload SARIF results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: rust-clippy-results.sarif
+          wait-for-processing: true
+
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  debricked_scan:
+    name: Debricked Security Scan
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Rust & Cache Cargo Registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run Debricked Scan
+        uses: debricked/actions@v4
+        env:
+          DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
+
+  publish_dry_run:
+    name: Publish dry run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish dry run
+        run: cargo publish --dry-run --no-verify
+
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-bin: false
+
+      - name: Install cargo-msrv
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-msrv
+
+      - name: Verify MSRV
+        id: verify
+        run: cargo msrv verify
+
+      - name: Find actual MSRV
+        if: ${{ failure() && steps.verify.conclusion == 'failure' }}
+        run: cargo msrv find
+
+  unused_dependencies:
+    name: Unused dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check for unused dependencies
+        uses: bnjbvr/cargo-machete@main
