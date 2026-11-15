@@ -10,9 +10,9 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use tar::Archive;
 use tar::Builder;
 
@@ -184,7 +184,11 @@ fn backup(session: SessionMode) -> io::Result<()> {
     let mut name = String::new();
     io::stdin().lock().read_line(&mut name).unwrap();
     let name = name.trim();
-    let name = if name.is_empty() { "termux.tar.gz" } else { name };
+    let name = if name.is_empty() {
+        "termux.tar.gz"
+    } else {
+        name
+    };
     println!("Will Create {}", name);
     clean_history();
     println!("Backing System Up...");
