@@ -69,15 +69,23 @@ jobs:
         run: cargo test --verbose
 
   build_android:
-    name: Build Android (${{ matrix.target }})
+    name: Build Android (${{ matrix.abi }})
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - armv7-linux-androideabi
-          - aarch64-linux-android
-          - i686-linux-android
-          - x86_64-linux-android
+        include:
+          - target: aarch64-linux-android
+            abi: arm64-v8a
+            clang: aarch64-linux-android21-clang
+          - target: armv7-linux-androideabi
+            abi: armeabi-v7a
+            clang: armv7a-linux-androideabi21-clang
+          - target: i686-linux-android
+            abi: x86
+            clang: i686-linux-android21-clang
+          - target: x86_64-linux-android
+            abi: x86_64
+            clang: x86_64-linux-android21-clang
     runs-on: ubuntu-latest
 
     steps:
@@ -96,25 +104,6 @@ jobs:
           ndk-version: r27c
           add-to-path: true
 
-      - name: Configure Cargo linker for Android
-        run: |
-          case "${{ matrix.target }}" in
-            armv7-linux-androideabi)
-              LINKER="armv7a-linux-androideabi24-clang"
-              ;;
-            aarch64-linux-android)
-              LINKER="aarch64-linux-android24-clang"
-              ;;
-            i686-linux-android)
-              LINKER="i686-linux-android24-clang"
-              ;;
-            x86_64-linux-android)
-              LINKER="x86_64-linux-android24-clang"
-              ;;
-          esac
-          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]-' '[:upper:]_')
-          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${LINKER}" >> "$GITHUB_ENV"
-
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -122,7 +111,17 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build for Android target
-        run: cargo build --release --target ${{ matrix.target }} --verbose
+        run: |
+          TARGET="${{ matrix.target }}"
+          CLANG="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.clang }}"
+          AR_TOOL="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          TARGET_UPPER=$(echo "$TARGET" | tr '[:lower:]-' '[:upper:]_')
+
+          export "CARGO_TARGET_${TARGET_UPPER}_LINKER=$CLANG"
+          export "CC_${TARGET_UPPER}=$CLANG"
+          export "AR_${TARGET_UPPER}=$AR_TOOL"
+
+          cargo build --release --target "$TARGET" --verbose
 
   clippy:
     name: Clippy & Security Analysis
