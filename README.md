@@ -23,7 +23,7 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    ```bash
    cargo binstall termux-backup
    ```
-3. Run the program:
+2. Run the program:
    ```bash
    termux-backup
    ```
