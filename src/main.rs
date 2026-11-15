@@ -84,7 +84,7 @@ fn sleep_seconds(seconds: u64) {
 }
 
 fn command_exists(cmd: &str) -> bool {
-    Command::new("sh")
+    Command::new("/data/data/com.termux/files/usr/bin/sh")
         .arg("-c")
         .arg(format!("command -v {}", cmd))
         .stdout(Stdio::null())
@@ -105,7 +105,7 @@ fn session_mode() -> SessionMode {
 }
 
 fn storage_writable() -> bool {
-    Command::new("sh")
+    Command::new("/data/data/com.termux/files/usr/bin/sh")
         .arg("-c")
         .arg("[ -w /storage/emulated/0 ]")
         .stdout(Stdio::null())
@@ -118,7 +118,7 @@ fn storage_writable() -> bool {
 fn check_storage_permission() {
     if !storage_writable() {
         println!("Setting Up Termux Storage...");
-        let _ = Command::new("termux-setup-storage")
+        let _ = Command::new("/data/data/com.termux/files/usr/bin/termux-setup-storage")
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -289,7 +289,7 @@ fn restore(session: SessionMode) -> io::Result<()> {
         }
         SessionMode::Normal => {
             clean_all_but_keep_core_functions()?;
-            let status = Command::new("tar")
+            let status = Command::new("/data/data/com.termux/files/usr/bin/tar")
                 .arg("-xzvf")
                 .arg(&backup_path)
                 .arg("-C")
