@@ -29,6 +29,28 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    termux-backup
    ```
 
+#### Install from GitHub Releases (`.tar.gz`)
+1. Download and extract the latest `.tar.gz` archive for your architecture:
+   ```bash
+   case "$(dpkg --print-architecture)" in
+     aarch64) TARGET="aarch64-linux-android" ;;
+     arm)     TARGET="armv7-linux-androideabi" ;;
+     i686)    TARGET="i686-linux-android" ;;
+     x86_64)  TARGET="x86_64-linux-android" ;;
+   esac
+   VERSION=$(curl -sL https://api.github.com/repos/rc-chuah/termux-backup/releases/latest | grep -Po '"tag_name": "\K[^"]*')
+   TAR_VERSION="${VERSION#v}"
+   curl -LO "https://github.com/rc-chuah/termux-backup/releases/download/${VERSION}/termux-backup-${TAR_VERSION}-${TARGET}.tar.gz"
+   tar -xzf "termux-backup-${TAR_VERSION}-${TARGET}.tar.gz" -C "$PREFIX/bin"
+   chmod +x "$PREFIX/bin/termux-backup"
+   rm -f "termux-backup-${TAR_VERSION}-${TARGET}.tar.gz"
+   ```
+   Or download it directly from [GitHub Releases](https://github.com/rc-chuah/termux-backup/releases/latest), extract `termux-backup`, and move it to `$PREFIX/bin/`.
+2. Run the program:
+   ```bash
+   termux-backup
+   ```
+
 #### Install from crates.io
 1. Install using Cargo:
    ```bash
