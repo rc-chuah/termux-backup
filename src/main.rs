@@ -3,8 +3,9 @@
 // Rewritten in Rust by RC Chuah-(RaynerSec)
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::fmt::Write as _;
 use std::fs;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::path::{Component, Path};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -13,6 +14,7 @@ use std::time::Duration;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use sha2::{Digest, Sha256};
 use tar::Archive;
 use tar::Builder;
 
@@ -96,6 +98,59 @@ fn resolve_backup_filename(input: &str) -> String {
         trimmed.to_string()
     } else {
         format!("{}.tar.gz", trimmed)
+    }
+}
+
+fn compute_sha256(path: &Path) -> io::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(&mut hex, "{:02x}", byte);
+    }
+    Ok(hex)
+}
+
+fn write_sha256_file(backup_path: &Path, filename: &str) -> io::Result<String> {
+    let hash = compute_sha256(backup_path)?;
+    let sha_path = Path::new(format!("{}.sha256", backup_path.display())).to_path_buf();
+    fs::write(&sha_path, format!("{}  {}\n", hash, filename))?;
+    Ok(hash)
+}
+
+fn verify_sha256_file(backup_path: &Path) -> io::Result<()> {
+    let sha_path = Path::new(format!("{}.sha256", backup_path.display())).to_path_buf();
+    if !sha_path.is_file() {
+        println!("No .sha256 checksum file found, skipping verification.");
+        return Ok(());
+    }
+    println!("Verifying SHA256 Checksum...");
+    let content = fs::read_to_string(&sha_path)?;
+    let expected = content
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid .sha256 file format"))?;
+    let actual = compute_sha256(backup_path)?;
+    if actual.eq_ignore_ascii_case(expected) {
+        println!("\x1B[0;32m SHA256 Checksum Verified! \x1B[0m");
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "SHA256 checksum mismatch! Expected {}, got {}",
+                expected, actual
+            ),
+        ))
     }
 }
 
@@ -234,6 +289,10 @@ fn backup(session: SessionMode) -> io::Result<()> {
     let enc = tar.into_inner()?;
     enc.finish()?;
 
+    println!("Generating SHA256 Checksum...");
+    let hash = write_sha256_file(&backup_path, &name)?;
+    println!("SHA256: {}", hash);
+
     println!("\x1B[0;32m Backing Up Finished! \x1B[0m");
     Ok(())
 }
@@ -244,7 +303,9 @@ fn list_backup_files(dir: &Path) {
             if let Ok(meta) = entry.metadata() {
                 if meta.is_file() {
                     if let Some(name) = entry.file_name().to_str() {
-                        println!("{}", name);
+                        if !name.ends_with(".sha256") {
+                            println!("{}", name);
+                        }
                     }
                 }
             }
@@ -257,9 +318,10 @@ fn restore(session: SessionMode) -> io::Result<()> {
 
     let has_files = fs::read_dir(backup_dir)
         .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .any(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            entries.filter_map(|e| e.ok()).any(|e| {
+                e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+                    && !e.file_name().to_string_lossy().ends_with(".sha256")
+            })
         })
         .unwrap_or(false);
 
@@ -281,7 +343,10 @@ fn restore(session: SessionMode) -> io::Result<()> {
     io::stdin().lock().read_line(&mut file)?;
     let mut file = file.trim().to_string();
 
-    while !is_safe_filename(&file) || !backup_dir.join(&file).is_file() {
+    while !is_safe_filename(&file)
+        || file.ends_with(".sha256")
+        || !backup_dir.join(&file).is_file()
+    {
         clear_screen();
         println!("No Match, Try Again!");
         sleep_seconds(5);
@@ -298,10 +363,12 @@ fn restore(session: SessionMode) -> io::Result<()> {
         file = file.trim().to_string();
     }
 
+    let backup_path = backup_dir.join(&file);
+    verify_sha256_file(&backup_path)?;
+
     println!("Start Restoring!");
     sleep_seconds(5);
 
-    let backup_path = backup_dir.join(&file);
     let files_dir = Path::new(TERMUX_ROOT).join("files");
 
     match session {
@@ -417,6 +484,17 @@ fn incorrect_selection() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_test_dir(prefix: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
     #[test]
     fn test_is_safe_filename_valid() {
@@ -445,5 +523,21 @@ mod tests {
             "my-backup.tar.gz"
         );
         assert_eq!(resolve_backup_filename("my-backup.tgz"), "my-backup.tgz");
+    }
+
+    #[test]
+    fn test_sha256_write_and_verify() {
+        let dir = temp_test_dir("termux_backup_sha256");
+        let archive = dir.join("test.tar.gz");
+        fs::write(&archive, b"hello termux backup").unwrap();
+
+        let hash = write_sha256_file(&archive, "test.tar.gz").unwrap();
+        assert_eq!(hash.len(), 64);
+        assert!(verify_sha256_file(&archive).is_ok());
+
+        fs::write(&archive, b"corrupted data").unwrap();
+        assert!(verify_sha256_file(&archive).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
