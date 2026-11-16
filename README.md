@@ -69,6 +69,26 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    termux-backup
    ```
 
+#### Verify Release Artifacts
+All release `.deb` and `.tar.gz` archives include SHA256 checksums and [GitHub Artifact Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
+
+1. Verify build provenance using [GitHub CLI](https://github.com/cli/cli) (`pkg install gh` in Termux):
+   ```bash
+   # Verify .deb package
+   gh attestation verify termux-backup_<version>_<arch>.deb --repo rc-chuah/termux-backup
+
+   # Verify .tar.gz archive
+   gh attestation verify termux-backup-<version>-<target>.tar.gz --repo rc-chuah/termux-backup
+   ```
+2. Or verify the SHA256 checksum:
+   ```bash
+   # Verify .deb checksum
+   sha256sum -c termux-backup_<version>_<arch>.deb.sha256
+
+   # Verify .tar.gz checksum
+   sha256sum -c termux-backup-<version>-<target>.tar.gz.sha256
+   ```
+
 ### Notes
 - Backup only works in a normal Termux session.
 - Restore works in both normal and failsafe sessions.
