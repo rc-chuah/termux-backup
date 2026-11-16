@@ -343,9 +343,7 @@ fn restore(session: SessionMode) -> io::Result<()> {
     io::stdin().lock().read_line(&mut file)?;
     let mut file = file.trim().to_string();
 
-    while !is_safe_filename(&file)
-        || file.ends_with(".sha256")
-        || !backup_dir.join(&file).is_file()
+    while !is_safe_filename(&file) || file.ends_with(".sha256") || !backup_dir.join(&file).is_file()
     {
         clear_screen();
         println!("No Match, Try Again!");
