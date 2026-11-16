@@ -9,7 +9,7 @@ use std::io::{self, BufRead, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -90,10 +90,43 @@ fn is_safe_filename(name: &str) -> bool {
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
+fn format_utc_timestamp(unix_secs: u64) -> String {
+    let days = (unix_secs / 86_400) as i64;
+    let time_of_day = unix_secs % 86_400;
+    let hour = time_of_day / 3_600;
+    let minute = (time_of_day % 3_600) / 60;
+    let second = time_of_day % 60;
+
+    // Howard Hinnant's civil-from-days algorithm (UTC)
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = y + if month <= 2 { 1 } else { 0 };
+
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        year, month, day, hour, minute, second
+    )
+}
+
+fn default_backup_filename() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format!("termux-{}.tar.gz", format_utc_timestamp(secs))
+}
+
 fn resolve_backup_filename(input: &str) -> String {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        "termux.tar.gz".to_string()
+        default_backup_filename()
     } else if trimmed.ends_with(".tar.gz") || trimmed.ends_with(".tgz") {
         trimmed.to_string()
     } else {
@@ -247,7 +280,7 @@ fn backup(session: SessionMode) -> io::Result<()> {
         return Ok(());
     }
     println!("Type The File Name For Backup");
-    println!("If Empty Will Use termux.tar.gz");
+    println!("If Empty Will Use termux-YYYYMMDD-HHMMSS.tar.gz");
     println!();
     print!("Enter File Name For Backup: ");
     io::stdout().flush()?;
@@ -482,7 +515,6 @@ fn incorrect_selection() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_test_dir(prefix: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -497,6 +529,7 @@ mod tests {
     #[test]
     fn test_is_safe_filename_valid() {
         assert!(is_safe_filename("termux.tar.gz"));
+        assert!(is_safe_filename("termux-20261116-152500.tar.gz"));
         assert!(is_safe_filename("backup-2026-11-16.tgz"));
         assert!(is_safe_filename("my_backup.tar.gz"));
     }
@@ -512,9 +545,30 @@ mod tests {
     }
 
     #[test]
+    fn test_format_utc_timestamp() {
+        assert_eq!(format_utc_timestamp(0), "19700101-000000");
+        assert_eq!(format_utc_timestamp(1_700_000_000), "20231114-221320");
+    }
+
+    #[test]
+    fn test_default_backup_filename() {
+        let name = default_backup_filename();
+        assert!(name.starts_with("termux-"));
+        assert!(name.ends_with(".tar.gz"));
+        assert_eq!(name.len(), "termux-YYYYMMDD-HHMMSS.tar.gz".len());
+        assert!(is_safe_filename(&name));
+    }
+
+    #[test]
     fn test_resolve_backup_filename() {
-        assert_eq!(resolve_backup_filename(""), "termux.tar.gz");
-        assert_eq!(resolve_backup_filename("   \n"), "termux.tar.gz");
+        let empty = resolve_backup_filename("");
+        assert!(empty.starts_with("termux-"));
+        assert!(empty.ends_with(".tar.gz"));
+
+        let whitespace = resolve_backup_filename("   \n");
+        assert!(whitespace.starts_with("termux-"));
+        assert!(whitespace.ends_with(".tar.gz"));
+
         assert_eq!(resolve_backup_filename("my-backup"), "my-backup.tar.gz");
         assert_eq!(
             resolve_backup_filename("my-backup.tar.gz"),
