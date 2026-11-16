@@ -73,7 +73,8 @@ jobs:
 
       - name: Package tar.gz archive and checksum
         run: |
-          ARCHIVE_NAME="termux-backup-${{ matrix.target }}.tar.gz"
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE_NAME="termux-backup-${VERSION}-${{ matrix.target }}.tar.gz"
           tar -czvf "${ARCHIVE_NAME}" -C "target/${{ matrix.target }}/release" termux-backup
           sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 
@@ -90,17 +91,17 @@ jobs:
           install -m 0755 "target/${{ matrix.target }}/release/termux-backup" \
             "${PKG_DIR}/data/data/com.termux/files/usr/bin/termux-backup"
 
-          cat > "${PKG_DIR}/DEBIAN/control" <<EOF
-          Package: termux-backup
-          Version: ${VERSION}
-          Architecture: ${DEB_ARCH}
-          Maintainer: "RC Chuah-(RaynerSec)" <44928288+rc-chuah@users.noreply.github.com>
-          Depends: tar, gzip
-          Section: utils
-          Priority: optional
-          Homepage: https://github.com/rc-chuah/termux-backup
-          Description: A Rust program to backup and restore your Termux home and sysroot directories.
-          EOF
+          printf '%s\n' \
+            "Package: termux-backup" \
+            "Version: ${VERSION}" \
+            "Architecture: ${DEB_ARCH}" \
+            'Maintainer: "RC Chuah-(RaynerSec)" <44928288+rc-chuah@users.noreply.github.com>' \
+            "Depends: tar, gzip" \
+            "Section: utils" \
+            "Priority: optional" \
+            "Homepage: https://github.com/rc-chuah/termux-backup" \
+            "Description: A Rust program to backup and restore your Termux home and sysroot directories." \
+            > "${PKG_DIR}/DEBIAN/control"
 
           dpkg-deb --build --root-owner-group "${PKG_DIR}" "${DEB_NAME}"
           sha256sum "${DEB_NAME}" > "${DEB_NAME}.sha256"
@@ -110,8 +111,8 @@ jobs:
         with:
           name: release-${{ matrix.abi }}
           path: |
-            termux-backup-${{ matrix.target }}.tar.gz
-            termux-backup-${{ matrix.target }}.tar.gz.sha256
+            termux-backup-*-${{ matrix.target }}.tar.gz
+            termux-backup-*-${{ matrix.target }}.tar.gz.sha256
             termux-backup_*_${{ matrix.deb_arch }}.deb
             termux-backup_*_${{ matrix.deb_arch }}.deb.sha256
 
