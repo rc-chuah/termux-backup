@@ -161,10 +161,7 @@ fn check_backup_dir() -> io::Result<()> {
     if answer.trim().eq_ignore_ascii_case("y") {
         println!("Creating Backup Directory...");
         fs::create_dir_all(backup_dir).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!("Create Backup Directory Failed! {}", e),
-            )
+            io::Error::new(e.kind(), format!("Create Backup Directory Failed! {}", e))
         })?;
         sleep_seconds(5);
         println!("Creating Backup Directory Completed...");
