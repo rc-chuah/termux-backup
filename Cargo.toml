@@ -50,3 +50,6 @@ opt-level = 3
 debug = false
 lto = true
 codegen-units = 1
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
