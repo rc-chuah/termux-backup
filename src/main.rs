@@ -59,7 +59,7 @@ fn run() -> io::Result<()> {
             }
             "2" => {
                 clear_screen();
-                restore(session)?;
+                restore()?;
                 press_enter()?;
             }
             "3" => {
@@ -346,7 +346,7 @@ fn list_backup_files(dir: &Path) {
     }
 }
 
-fn restore(session: SessionMode) -> io::Result<()> {
+fn restore() -> io::Result<()> {
     let backup_dir = Path::new(BACKUP_DIR);
 
     let has_files = fs::read_dir(backup_dir)
@@ -401,30 +401,14 @@ fn restore(session: SessionMode) -> io::Result<()> {
     sleep_seconds(5);
 
     let files_dir = Path::new(TERMUX_ROOT).join("files");
+    remove_dir_contents(&files_dir)?;
 
-    match session {
-        SessionMode::Failsafe => {
-            remove_dir_contents(&files_dir)?;
-            let file = fs::File::open(&backup_path)?;
-            let decoder = GzDecoder::new(file);
-            let mut archive = Archive::new(decoder);
-            archive.unpack(&files_dir)?;
-        }
-        SessionMode::Normal => {
-            clean_all_but_keep_core_functions()?;
-            let status = Command::new("/data/data/com.termux/files/usr/bin/tar")
-                .arg("-xzvf")
-                .arg(&backup_path)
-                .arg("-C")
-                .arg(&files_dir)
-                .arg("--recursive-unlink")
-                .arg("--preserve-permissions")
-                .status()?;
-            if !status.success() {
-                return Err(io::Error::other("tar restore failed"));
-            }
-        }
-    }
+    let file = fs::File::open(&backup_path)?;
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+    archive.set_preserve_permissions(true);
+    archive.set_unpack_xattrs(true);
+    archive.unpack(&files_dir)?;
 
     println!("\x1B[0;32m Restoring Finished! \x1B[0m");
     Ok(())
@@ -443,58 +427,6 @@ fn remove_dir_contents(dir: &Path) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         remove_path(&entry?.path())?;
     }
-    Ok(())
-}
-
-fn keep_only(dir: &Path, keep: &[&str]) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name_lossy = name.to_string_lossy();
-        if name_lossy.starts_with('.') {
-            continue;
-        }
-        if keep.iter().any(|k| name_lossy == *k) {
-            continue;
-        }
-        remove_path(&entry.path())?;
-    }
-    Ok(())
-}
-
-fn clean_all_but_keep_core_functions() -> io::Result<()> {
-    let files_dir = Path::new(TERMUX_ROOT).join("files");
-    let usr_dir = files_dir.join("usr");
-    let bin_dir = usr_dir.join("bin");
-    let lib_dir = usr_dir.join("lib");
-
-    // Clean Files Directory, keep usr
-    keep_only(&files_dir, &["usr"])?;
-    // Clean $PREFIX Directory, keep bin and lib
-    keep_only(&usr_dir, &["bin", "lib"])?;
-    // Clean Bin Directory, keep utilities needed for restore
-    keep_only(
-        &bin_dir,
-        &["coreutils", "rm", "xargs", "find", "grep", "tar", "gzip"],
-    )?;
-    // Clean Lib Directory, keep libraries needed for tar/gzip
-    keep_only(
-        &lib_dir,
-        &[
-            "libandroid-glob.so",
-            "libtermux-exec.so",
-            "libiconv.so",
-            "libandroid-support.so",
-            "libgmp.so",
-        ],
-    )?;
-    // Remove temporary utilities that are no longer needed
-    for name in ["coreutils", "grep", "xargs", "find", "rm"] {
-        let _ = fs::remove_file(bin_dir.join(name));
-    }
-    let _ = fs::remove_file(lib_dir.join("libgmp.so"));
-    let _ = fs::remove_file(lib_dir.join("libandroid-support.so"));
-
     Ok(())
 }
 
