@@ -96,7 +96,6 @@ jobs:
             "Version: ${VERSION}" \
             "Architecture: ${DEB_ARCH}" \
             'Maintainer: "RC Chuah-(RaynerSec)" <44928288+rc-chuah@users.noreply.github.com>' \
-            "Depends: tar, gzip" \
             "Section: utils" \
             "Priority: optional" \
             "Homepage: https://github.com/rc-chuah/termux-backup" \
