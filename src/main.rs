@@ -5,7 +5,7 @@
 
 use std::fs;
 use std::io::{self, BufRead, Write};
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -37,7 +37,7 @@ fn run() -> io::Result<()> {
         clear_screen();
         check_storage_permission();
         clear_screen();
-        check_backup_dir();
+        check_backup_dir()?;
         clear_screen();
         let session = session_mode();
         println!("This Program Will Backup/Restore Termux");
@@ -47,7 +47,7 @@ fn run() -> io::Result<()> {
         print!("Enter Option: ");
         io::stdout().flush()?;
         let mut input = String::new();
-        io::stdin().lock().read_line(&mut input).unwrap();
+        io::stdin().lock().read_line(&mut input)?;
         let option = input.trim();
         match option {
             "1" => {
@@ -81,6 +81,22 @@ fn clear_screen() {
 
 fn sleep_seconds(seconds: u64) {
     thread::sleep(Duration::from_secs(seconds));
+}
+
+fn is_safe_filename(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
+fn resolve_backup_filename(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        "termux.tar.gz".to_string()
+    } else if trimmed.ends_with(".tar.gz") || trimmed.ends_with(".tgz") {
+        trimmed.to_string()
+    } else {
+        format!("{}.tar.gz", trimmed)
+    }
 }
 
 fn command_exists(cmd: &str) -> bool {
@@ -129,31 +145,33 @@ fn check_storage_permission() {
     }
 }
 
-fn check_backup_dir() {
+fn check_backup_dir() -> io::Result<()> {
     let backup_dir = Path::new(BACKUP_DIR);
     if backup_dir.exists() {
-        return;
+        return Ok(());
     }
     println!("Backup Directory:");
     println!("{}", BACKUP_DIR);
     println!("Backup Directory Does Not Exists");
     println!();
     print!("Create Backup Directory? [y/n] ");
-    let _ = io::stdout().flush();
+    io::stdout().flush()?;
     let mut answer = String::new();
-    io::stdin().lock().read_line(&mut answer).unwrap();
+    io::stdin().lock().read_line(&mut answer)?;
     if answer.trim().eq_ignore_ascii_case("y") {
         println!("Creating Backup Directory...");
-        if let Err(e) = fs::create_dir_all(backup_dir) {
-            println!("Create Backup Directory Failed! {}", e);
-            std::process::exit(1);
-        }
+        fs::create_dir_all(backup_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!("Create Backup Directory Failed! {}", e),
+            )
+        })?;
         sleep_seconds(5);
         println!("Creating Backup Directory Completed...");
         sleep_seconds(5);
+        Ok(())
     } else {
-        println!("Exiting...");
-        std::process::exit(1);
+        Err(io::Error::other("Backup directory creation declined"))
     }
 }
 
@@ -182,32 +200,36 @@ fn backup(session: SessionMode) -> io::Result<()> {
     print!("Enter File Name For Backup: ");
     io::stdout().flush()?;
     let mut name = String::new();
-    io::stdin().lock().read_line(&mut name).unwrap();
-    let name = name.trim();
-    let name = if name.is_empty() {
-        "termux.tar.gz"
-    } else {
-        name
-    };
+    io::stdin().lock().read_line(&mut name)?;
+    let name = resolve_backup_filename(&name);
+
+    if !is_safe_filename(&name) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Invalid backup filename: must not contain path separators or '..'",
+        ));
+    }
+
     println!("Will Create {}", name);
     clean_history();
     println!("Backing System Up...");
     sleep_seconds(5);
 
-    let backup_path = Path::new(BACKUP_DIR).join(name);
+    let backup_path = Path::new(BACKUP_DIR).join(&name);
     let files_dir = Path::new(TERMUX_ROOT).join("files");
-
-    let file = fs::File::create(&backup_path)?;
-    let enc = GzEncoder::new(file, Compression::default());
-    let mut tar = Builder::new(enc);
-
     let home_dir = files_dir.join("home");
     let usr_dir = files_dir.join("usr");
 
     if !home_dir.exists() || !usr_dir.exists() {
-        println!("Make Sure Running In Termux Default Environment.");
-        std::process::exit(1);
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Make Sure Running In Termux Default Environment.",
+        ));
     }
+
+    let file = fs::File::create(&backup_path)?;
+    let enc = GzEncoder::new(file, Compression::default());
+    let mut tar = Builder::new(enc);
 
     tar.append_dir_all("home", &home_dir)?;
     tar.append_dir_all("usr", &usr_dir)?;
@@ -245,8 +267,10 @@ fn restore(session: SessionMode) -> io::Result<()> {
         .unwrap_or(false);
 
     if !has_files {
-        println!("Backup Directory Is Empty! Exiting...");
-        std::process::exit(1);
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Backup Directory Is Empty! Exiting...",
+        ));
     }
 
     println!("Note: Make Sure No Background Program Running.");
@@ -257,10 +281,10 @@ fn restore(session: SessionMode) -> io::Result<()> {
     print!("Choose A Backup File: ");
     io::stdout().flush()?;
     let mut file = String::new();
-    io::stdin().lock().read_line(&mut file).unwrap();
+    io::stdin().lock().read_line(&mut file)?;
     let mut file = file.trim().to_string();
 
-    while !backup_dir.join(&file).is_file() {
+    while !is_safe_filename(&file) || !backup_dir.join(&file).is_file() {
         clear_screen();
         println!("No Match, Try Again!");
         sleep_seconds(5);
@@ -273,7 +297,7 @@ fn restore(session: SessionMode) -> io::Result<()> {
         print!("Choose A Backup File: ");
         io::stdout().flush()?;
         file.clear();
-        io::stdin().lock().read_line(&mut file).unwrap();
+        io::stdin().lock().read_line(&mut file)?;
         file = file.trim().to_string();
     }
 
@@ -384,11 +408,45 @@ fn press_enter() -> io::Result<()> {
     print!("Press Enter To Continue...");
     io::stdout().flush()?;
     let mut buf = String::new();
-    io::stdin().lock().read_line(&mut buf).unwrap();
+    io::stdin().lock().read_line(&mut buf)?;
     clear_screen();
     Ok(())
 }
 
 fn incorrect_selection() {
     println!("Incorrect Selection! Try Again.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_safe_filename_valid() {
+        assert!(is_safe_filename("termux.tar.gz"));
+        assert!(is_safe_filename("backup-2026-11-16.tgz"));
+        assert!(is_safe_filename("my_backup.tar.gz"));
+    }
+
+    #[test]
+    fn test_is_safe_filename_rejects_traversal_and_paths() {
+        assert!(!is_safe_filename(""));
+        assert!(!is_safe_filename("."));
+        assert!(!is_safe_filename(".."));
+        assert!(!is_safe_filename("../termux.tar.gz"));
+        assert!(!is_safe_filename("subdir/termux.tar.gz"));
+        assert!(!is_safe_filename("/storage/emulated/0/termux.tar.gz"));
+    }
+
+    #[test]
+    fn test_resolve_backup_filename() {
+        assert_eq!(resolve_backup_filename(""), "termux.tar.gz");
+        assert_eq!(resolve_backup_filename("   \n"), "termux.tar.gz");
+        assert_eq!(resolve_backup_filename("my-backup"), "my-backup.tar.gz");
+        assert_eq!(
+            resolve_backup_filename("my-backup.tar.gz"),
+            "my-backup.tar.gz"
+        );
+        assert_eq!(resolve_backup_filename("my-backup.tgz"), "my-backup.tgz");
+    }
 }
