@@ -119,6 +119,10 @@ jobs:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Download all artifacts
@@ -135,6 +139,13 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.deb
             artifacts/*.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            artifacts/*.tar.gz
+            artifacts/*.deb
 
   publish_crates_io:
     name: Publish to crates.io
