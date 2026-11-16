@@ -274,6 +274,39 @@ fn clean_history() {
     }
 }
 
+fn append_dir_filtered<W: Write>(
+    tar: &mut Builder<W>,
+    archive_prefix: &Path,
+    src_dir: &Path,
+) -> io::Result<()> {
+    tar.append_dir(archive_prefix, src_dir)?;
+    for entry in fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = archive_prefix.join(entry.file_name());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileTypeExt;
+            if file_type.is_socket()
+                || file_type.is_fifo()
+                || file_type.is_block_device()
+                || file_type.is_char_device()
+            {
+                continue;
+            }
+        }
+
+        if file_type.is_dir() {
+            append_dir_filtered(tar, &dst_path, &src_path)?;
+        } else {
+            tar.append_path_with_name(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
 fn backup(session: SessionMode) -> io::Result<()> {
     if session != SessionMode::Normal {
         println!("Backup Is Not Supported In [FAILSAFE SESSION], Exiting...");
@@ -315,9 +348,10 @@ fn backup(session: SessionMode) -> io::Result<()> {
     let file = fs::File::create(&backup_path)?;
     let enc = GzEncoder::new(file, Compression::default());
     let mut tar = Builder::new(enc);
+    tar.follow_symlinks(false);
 
-    tar.append_dir_all("home", &home_dir)?;
-    tar.append_dir_all("usr", &usr_dir)?;
+    append_dir_filtered(&mut tar, Path::new("home"), &home_dir)?;
+    append_dir_filtered(&mut tar, Path::new("usr"), &usr_dir)?;
 
     let enc = tar.into_inner()?;
     enc.finish()?;
