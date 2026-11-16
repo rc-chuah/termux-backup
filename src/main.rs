@@ -6,7 +6,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, BufRead, Read, Write};
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -122,13 +122,13 @@ fn compute_sha256(path: &Path) -> io::Result<String> {
 
 fn write_sha256_file(backup_path: &Path, filename: &str) -> io::Result<String> {
     let hash = compute_sha256(backup_path)?;
-    let sha_path = Path::new(format!("{}.sha256", backup_path.display())).to_path_buf();
+    let sha_path = PathBuf::from(format!("{}.sha256", backup_path.display()));
     fs::write(&sha_path, format!("{}  {}\n", hash, filename))?;
     Ok(hash)
 }
 
 fn verify_sha256_file(backup_path: &Path) -> io::Result<()> {
-    let sha_path = Path::new(format!("{}.sha256", backup_path.display())).to_path_buf();
+    let sha_path = PathBuf::from(format!("{}.sha256", backup_path.display()));
     if !sha_path.is_file() {
         println!("No .sha256 checksum file found, skipping verification.");
         return Ok(());
@@ -484,7 +484,7 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_test_dir(prefix: &str) -> std::path::PathBuf {
+    fn temp_test_dir(prefix: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
