@@ -1,4 +1,9 @@
 # termux-backup
+
+[![Build & Analyze](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml)
+[![Crates.io Version](https://img.shields.io/crates/v/termux-backup.svg)](https://crates.io/crates/termux-backup)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://github.com/rc-chuah/termux-backup/blob/main/LICENSE)
+
 A Rust program to backup and restore your Termux home and sysroot directories.
 
 ## Download Counter
@@ -24,7 +29,7 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    ```bash
    pkg install ./termux-backup_*.deb
    ```
-3. Run the program:
+2. Run the program:
    ```bash
    termux-backup
    ```
@@ -72,7 +77,7 @@ A Rust program to backup and restore your Termux home and sysroot directories.
 #### Build from source
 1. Install dependencies in Termux:
    ```bash
-   pkg update -y && pkg install git rust tar gzip -y
+   pkg update -y && pkg install git rust -y
    ```
 2. Git clone the repository:
    ```bash
@@ -86,7 +91,7 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    ```bash
    cargo build --release
    ```
-5. Install to PATH
+5. Install to PATH:
    ```bash
    cp target/release/termux-backup $PREFIX/bin/termux-backup && chmod +x $PREFIX/bin/termux-backup
    ```
@@ -120,6 +125,7 @@ All release `.deb` and `.tar.gz` archives include SHA256 checksums and [GitHub A
 - Restore works in both normal and failsafe sessions.
 - Backups and their `.sha256` checksum files are stored at `/storage/emulated/0/termux/backups`.
 - When prompted for a backup name, leaving it blank defaults to `termux-YYYYMMDD-HHMMSS.tar.gz` (UTC), while custom names automatically append `.tar.gz` if `.tar.gz` or `.tgz` is omitted.
+- SHA-256 checksum calculation, backup compression, and archive restoration display a live progress bar with percentage, `MB/s` speed, and ETA.
 - During restore, the archive is automatically verified against its `.sha256` checksum file if present before modifying the Termux environment.
 - During restore, the existing Termux `files` directory is cleaned before extracting the backup archive in pure Rust.
 
@@ -135,3 +141,7 @@ All release `.deb` and `.tar.gz` archives include SHA256 checksums and [GitHub A
 ## Credits
 - Original bash script by Zongou.
 - Rewritten in Rust by RC Chuah-(RaynerSec).
+
+## License
+
+Licensed under the [GNU General Public License v3.0](https://github.com/rc-chuah/termux-backup/blob/main/LICENSE).
