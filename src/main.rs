@@ -9,7 +9,7 @@ use std::io::{self, BufRead, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -25,6 +25,112 @@ const TERMUX_ROOT: &str = "/data/data/com.termux";
 enum SessionMode {
     Normal,
     Failsafe,
+}
+
+struct ProgressBar {
+    label: &'static str,
+    total_bytes: u64,
+    current_bytes: u64,
+    start: Instant,
+    last_draw: Instant,
+}
+
+impl ProgressBar {
+    fn new(label: &'static str, total_bytes: u64) -> Self {
+        let now = Instant::now();
+        let mut bar = Self {
+            label,
+            total_bytes,
+            current_bytes: 0,
+            start: now,
+            last_draw: now - Duration::from_secs(1),
+        };
+        bar.render(true);
+        bar
+    }
+
+    fn advance(&mut self, bytes: u64) {
+        self.current_bytes = self.current_bytes.saturating_add(bytes);
+        if self.last_draw.elapsed() >= Duration::from_millis(100) {
+            self.render(false);
+        }
+    }
+
+    fn finish(&mut self) {
+        if self.total_bytes > 0 {
+            self.current_bytes = self.total_bytes;
+        }
+        self.render(true);
+        println!();
+    }
+
+    fn render(&mut self, force: bool) {
+        if !force && self.last_draw.elapsed() < Duration::from_millis(100) {
+            return;
+        }
+        self.last_draw = Instant::now();
+
+        let elapsed = self.start.elapsed().as_secs_f64().max(0.001);
+        let speed_mb = (self.current_bytes as f64 / 1_048_576.0) / elapsed;
+        let cur_mb = self.current_bytes as f64 / 1_048_576.0;
+
+        if self.total_bytes > 0 {
+            let clamped = self.current_bytes.min(self.total_bytes);
+            let ratio = clamped as f64 / self.total_bytes as f64;
+            let pct = (ratio * 100.0).min(100.0);
+            let width = 24usize;
+            let filled = ((ratio * width as f64).round() as usize).min(width);
+            let bar = format!("{}{}", "█".repeat(filled), "░".repeat(width - filled));
+            let tot_mb = self.total_bytes as f64 / 1_048_576.0;
+
+            let eta_secs = if clamped > 0 && clamped < self.total_bytes {
+                let remaining = (self.total_bytes - clamped) as f64;
+                let rate = clamped as f64 / elapsed;
+                (remaining / rate).round() as u64
+            } else {
+                0
+            };
+
+            print!(
+                "\r\x1B[2K{}: [{}] {:5.1}% ({:.1}/{:.1} MB | {:.1} MB/s | ETA {:02}:{:02})",
+                self.label,
+                bar,
+                pct,
+                cur_mb,
+                tot_mb,
+                speed_mb,
+                eta_secs / 60,
+                eta_secs % 60
+            );
+        } else {
+            print!(
+                "\r\x1B[2K{}: {:.1} MB ({:.1} MB/s)",
+                self.label, cur_mb, speed_mb
+            );
+        }
+        let _ = io::stdout().flush();
+    }
+}
+
+struct ProgressReader<'a, R: Read> {
+    inner: R,
+    progress: &'a mut ProgressBar,
+}
+
+impl<'a, R: Read> ProgressReader<'a, R> {
+    fn new(inner: R, progress: &'a mut ProgressBar) -> Self {
+        Self { inner, progress }
+    }
+}
+
+impl<R: Read> Read for ProgressReader<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 {
+            self.progress.advance(n as u64);
+        }
+        Ok(n)
+    }
 }
 
 fn main() {
@@ -135,16 +241,20 @@ fn resolve_backup_filename(input: &str) -> String {
 }
 
 fn compute_sha256(path: &Path) -> io::Result<String> {
-    let mut file = fs::File::open(path)?;
+    let total_bytes = fs::metadata(path)?.len();
+    let file = fs::File::open(path)?;
+    let mut progress = ProgressBar::new("SHA256", total_bytes);
+    let mut reader = ProgressReader::new(file, &mut progress);
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
-        let bytes_read = file.read(&mut buffer)?;
+        let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
         }
         hasher.update(&buffer[..bytes_read]);
     }
+    progress.finish();
     let digest = hasher.finalize();
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -274,10 +384,41 @@ fn clean_history() {
     }
 }
 
+fn calculate_dir_bytes(src_dir: &Path) -> io::Result<u64> {
+    let mut total = 0u64;
+    for entry in fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileTypeExt;
+            if file_type.is_socket()
+                || file_type.is_fifo()
+                || file_type.is_block_device()
+                || file_type.is_char_device()
+            {
+                continue;
+            }
+        }
+
+        if file_type.is_dir() {
+            total = total.saturating_add(calculate_dir_bytes(&src_path)?);
+        } else if file_type.is_file() {
+            if let Ok(meta) = entry.metadata() {
+                total = total.saturating_add(meta.len());
+            }
+        }
+    }
+    Ok(total)
+}
+
 fn append_dir_filtered<W: Write>(
     tar: &mut Builder<W>,
     archive_prefix: &Path,
     src_dir: &Path,
+    progress: &mut ProgressBar,
 ) -> io::Result<()> {
     tar.append_dir(archive_prefix, src_dir)?;
     for entry in fs::read_dir(src_dir)? {
@@ -299,7 +440,15 @@ fn append_dir_filtered<W: Write>(
         }
 
         if file_type.is_dir() {
-            append_dir_filtered(tar, &dst_path, &src_path)?;
+            append_dir_filtered(tar, &dst_path, &src_path, progress)?;
+        } else if file_type.is_file() {
+            let meta = fs::symlink_metadata(&src_path)?;
+            let mut header = tar::Header::new_gnu();
+            header.set_metadata(&meta);
+            header.set_cksum();
+            let file = fs::File::open(&src_path)?;
+            let mut reader = ProgressReader::new(file, progress);
+            tar.append_data(&mut header, &dst_path, &mut reader)?;
         } else {
             tar.append_path_with_name(&src_path, &dst_path)?;
         }
@@ -330,8 +479,7 @@ fn backup(session: SessionMode) -> io::Result<()> {
 
     println!("Will Create {}", name);
     clean_history();
-    println!("Backing System Up...");
-    sleep_seconds(5);
+    println!("Scanning Files...");
 
     let backup_path = Path::new(BACKUP_DIR).join(&name);
     let files_dir = Path::new(TERMUX_ROOT).join("files");
@@ -345,13 +493,19 @@ fn backup(session: SessionMode) -> io::Result<()> {
         ));
     }
 
+    let total_bytes =
+        calculate_dir_bytes(&home_dir)?.saturating_add(calculate_dir_bytes(&usr_dir)?);
+    println!("Backing System Up...");
+
     let file = fs::File::create(&backup_path)?;
     let enc = GzEncoder::new(file, Compression::default());
     let mut tar = Builder::new(enc);
     tar.follow_symlinks(false);
 
-    append_dir_filtered(&mut tar, Path::new("home"), &home_dir)?;
-    append_dir_filtered(&mut tar, Path::new("usr"), &usr_dir)?;
+    let mut progress = ProgressBar::new("Backup", total_bytes);
+    append_dir_filtered(&mut tar, Path::new("home"), &home_dir, &mut progress)?;
+    append_dir_filtered(&mut tar, Path::new("usr"), &usr_dir, &mut progress)?;
+    progress.finish();
 
     let enc = tar.into_inner()?;
     enc.finish()?;
@@ -437,12 +591,16 @@ fn restore() -> io::Result<()> {
     let files_dir = Path::new(TERMUX_ROOT).join("files");
     remove_dir_contents(&files_dir)?;
 
+    let archive_bytes = fs::metadata(&backup_path)?.len();
     let file = fs::File::open(&backup_path)?;
-    let decoder = GzDecoder::new(file);
+    let mut progress = ProgressBar::new("Restore", archive_bytes);
+    let reader = ProgressReader::new(file, &mut progress);
+    let decoder = GzDecoder::new(reader);
     let mut archive = Archive::new(decoder);
     archive.set_preserve_permissions(true);
     archive.set_unpack_xattrs(true);
     archive.unpack(&files_dir)?;
+    progress.finish();
 
     println!("\x1B[0;32m Restoring Finished! \x1B[0m");
     Ok(())
@@ -557,5 +715,18 @@ mod tests {
         assert!(verify_sha256_file(&archive).is_err());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_progress_reader_tracks_bytes() {
+        let payload = b"0123456789abcdef";
+        let mut bar = ProgressBar::new("Test", payload.len() as u64);
+        let mut reader = ProgressReader::new(&payload[..], &mut bar);
+        let mut out = Vec::new();
+        reader.read_to_end(&mut out).unwrap();
+        bar.finish();
+
+        assert_eq!(out, payload);
+        assert_eq!(bar.current_bytes, payload.len() as u64);
     }
 }
