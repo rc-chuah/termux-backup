@@ -183,7 +183,7 @@ fn run() -> io::Result<()> {
 }
 
 fn clear_screen() {
-    print!("\x1B[2J\x1B[1;1H");
+    print!("\x1B[2J\x1B[3J\x1B[H");
     let _ = io::stdout().flush();
 }
 
@@ -477,6 +477,7 @@ fn backup(session: SessionMode) -> io::Result<()> {
         ));
     }
 
+    clear_screen();
     println!("Will Create {}", name);
     clean_history();
     println!("Scanning Files...");
@@ -582,6 +583,7 @@ fn restore() -> io::Result<()> {
         file = file.trim().to_string();
     }
 
+    clear_screen();
     let backup_path = backup_dir.join(&file);
     verify_sha256_file(&backup_path)?;
 
