@@ -167,6 +167,9 @@ jobs:
   security_audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
 
     steps:
       - name: Checkout repository
@@ -214,7 +217,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Publish dry run
-        run: cargo publish --dry-run --no-verify
+        run: cargo publish --dry-run --no-verify --locked
 
   msrv:
     name: MSRV
