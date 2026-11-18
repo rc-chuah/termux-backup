@@ -20,19 +20,15 @@ jobs:
         include:
           - target: aarch64-linux-android
             abi: arm64-v8a
-            deb_arch: aarch64
             clang: aarch64-linux-android21-clang
           - target: armv7-linux-androideabi
             abi: armeabi-v7a
-            deb_arch: arm
             clang: armv7a-linux-androideabi21-clang
           - target: i686-linux-android
             abi: x86
-            deb_arch: i686
             clang: i686-linux-android21-clang
           - target: x86_64-linux-android
             abi: x86_64
-            deb_arch: x86_64
             clang: x86_64-linux-android21-clang
     runs-on: ubuntu-latest
 
@@ -78,33 +74,6 @@ jobs:
           tar -czvf "${ARCHIVE_NAME}" -C "target/${{ matrix.target }}/release" termux-backup
           sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 
-      - name: Build Termux .deb package and checksum
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          DEB_ARCH="${{ matrix.deb_arch }}"
-          PKG_DIR="pkg-deb-${DEB_ARCH}"
-          DEB_NAME="termux-backup_${VERSION}_${DEB_ARCH}.deb"
-
-          mkdir -p "${PKG_DIR}/DEBIAN"
-          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/bin"
-
-          install -m 0755 "target/${{ matrix.target }}/release/termux-backup" \
-            "${PKG_DIR}/data/data/com.termux/files/usr/bin/termux-backup"
-
-          printf '%s\n' \
-            "Package: termux-backup" \
-            "Version: ${VERSION}" \
-            "Architecture: ${DEB_ARCH}" \
-            'Maintainer: "RC Chuah-(RaynerSec)" <44928288+rc-chuah@users.noreply.github.com>' \
-            "Section: utils" \
-            "Priority: optional" \
-            "Homepage: https://github.com/rc-chuah/termux-backup" \
-            "Description: A Rust program to backup and restore your Termux home and sysroot directories." \
-            > "${PKG_DIR}/DEBIAN/control"
-
-          dpkg-deb --build --root-owner-group "${PKG_DIR}" "${DEB_NAME}"
-          sha256sum "${DEB_NAME}" > "${DEB_NAME}.sha256"
-
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -112,8 +81,6 @@ jobs:
           path: |
             termux-backup-*-${{ matrix.target }}.tar.gz
             termux-backup-*-${{ matrix.target }}.tar.gz.sha256
-            termux-backup_*_${{ matrix.deb_arch }}.deb
-            termux-backup_*_${{ matrix.deb_arch }}.deb.sha256
 
   publish_release:
     name: Create GitHub Release
@@ -137,7 +104,6 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/*.tar.gz
-            artifacts/*.deb
             artifacts/*.sha256
 
       - name: Attest build provenance
@@ -145,7 +111,6 @@ jobs:
         with:
           subject-path: |
             artifacts/*.tar.gz
-            artifacts/*.deb
 
       - name: Scan release artifacts on VirusTotal
         uses: crazy-max/ghaction-virustotal@v5
@@ -154,7 +119,6 @@ jobs:
           request_rate: 4
           files: |
             artifacts/*.tar.gz
-            artifacts/*.deb
           update_release_body: true
 
   publish_crates_io:
