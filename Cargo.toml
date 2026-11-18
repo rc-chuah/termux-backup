@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 authors = ["RC Chuah-(RaynerSec)", "Zongou"]
 description = "A Rust program to backup and restore your Termux home and sysroot directories."
-documentation = "https://github.com/rc-chuah/termux-backup/blob/main/README.md"
+documentation = "https://docs.rs/termux-backup"
 homepage = "https://rc-chuah.is-a.dev/termux-backup/"
 repository = "https://github.com/rc-chuah/termux-backup"
 license = "GPL-3.0-or-later"
@@ -54,3 +54,14 @@ codegen-units = 1
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
+
+[package.metadata.docs.rs]
+all-features = true
+default-target = "x86_64-unknown-linux-gnu"
+targets = [
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+    "i686-linux-android",
+    "x86_64-linux-android",
+]
+rustdoc-args = ["--cfg", "docsrs"]
