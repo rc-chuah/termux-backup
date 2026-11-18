@@ -182,7 +182,7 @@ jobs:
         run: |
           NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          if cargo search "$NAME" --limit 1 | grep -q "^${NAME} = \"${VERSION}\""; then
+          if cargo info "${NAME}@${VERSION}" >/dev/null 2>&1; then
             echo "${NAME}@${VERSION} is already published on crates.io, skipping."
           else
             cargo publish --verbose
