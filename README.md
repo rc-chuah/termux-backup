@@ -2,6 +2,7 @@
 
 [![Build & Analyze](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml)
 [![Crates.io Version](https://img.shields.io/crates/v/termux-backup.svg)](https://crates.io/crates/termux-backup)
+[![docs.rs](https://img.shields.io/docsrs/termux-backup)](https://docs.rs/termux-backup)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://github.com/rc-chuah/termux-backup/blob/main/LICENSE)
 
 A Rust program to backup and restore your Termux home and sysroot directories.
