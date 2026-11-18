@@ -148,7 +148,7 @@ jobs:
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -A "github-actions-release-check (${{ github.repository }})" \
-            "https://crates.io/crates/${NAME}/${VERSION}")
+            "https://crates.io/api/v1/crates/${NAME}/${VERSION}")
           if [ "$STATUS" = "200" ]; then
             echo "${NAME}@${VERSION} is already published on crates.io, skipping."
           else
