@@ -1,3 +1,61 @@
+//! # `termux-backup`
+//!
+//! A fast, pure-Rust CLI utility to back up and restore Termux environments
+//! (`/data/data/com.termux/files/home` and `usr`) on Android with live progress
+//! reporting and SHA-256 verification.
+//!
+//! ## Overview
+//!
+//! Rewritten from Zongou's original Bash script into Rust, `termux-backup`
+//! archives `/data/data/com.termux/files` (`home` and `usr`) into a
+//! gzip-compressed TAR archive (`.tar.gz`) stored at
+//! `/storage/emulated/0/termux/backups` alongside a matching `.sha256` checksum
+//! file. During restoration, it verifies the archive against its checksum,
+//! safely cleans existing files (including read-only cached directories), and
+//! extracts the backup in pure Rust.
+//!
+//! ## Key Capabilities
+//!
+//! - **Pure-Rust Archiving & Extraction:** Built on [`tar`] and [`flate2`] with
+//!   zero external `tar` or `gzip` binary dependencies.
+//! - **Interactive Terminal Menu:** Guides users through storage permission
+//!   checks, backup directory setup, backup creation, and archive restoration.
+//! - **Session Detection:** Distinguishes between `[NORMAL SESSION]` (where
+//!   both backup and restore are permitted) and `[FAILSAFE SESSION]` (where
+//!   only restore is allowed to prevent incomplete backups).
+//! - **SHA-256 Integrity & Path Safety:** Generates and validates `.sha256`
+//!   checksums before modifying the Termux environment, prevents path traversal
+//!   via strict filename validation, and skips special Unix device, socket, and
+//!   FIFO files when archiving.
+//! - **Non-Destructive Backups:** Preserves user files and shell history
+//!   (`.bash_history`) intact without modifying `$HOME` during backup.
+//! - **Permission-Resilient Cleanup:** Automatically adjusts read-only
+//!   directory permissions (`0o700`, such as Go module or Cargo caches) before
+//!   wiping existing Termux directories during restore.
+//! - **Mobile-Safe Progress Tracking:** Displays live transfer progress bars,
+//!   transferred/total byte sizes (`MB`/`GB`), throughput (`MB/s`), and
+//!   estimated time remaining (`ETA`) formatted cleanly for narrow Termux
+//!   portrait terminals.
+//!
+//! ## Installation
+//!
+//! ```sh
+//! cargo install --locked termux-backup
+//! ```
+//!
+//! ## Usage
+//!
+//! Run the compiled binary directly inside Termux:
+//!
+//! ```sh
+//! termux-backup
+//! ```
+//!
+//! Follow the on-screen prompts to select:
+//! 1. **Backup** — Archive `home` and `usr` into `/storage/emulated/0/termux/backups` (defaults to `termux-YYYYMMDD-HHMMSS.tar.gz` in UTC).
+//! 2. **Restore** — Verify `.sha256` checksum, clean `/data/data/com.termux/files`, and unpack a chosen archive back into Termux.
+//! 3. **Exit Menu** — Quit the program.
+
 // termux-backup - Rust rewrite
 // Original bash script by Zongou
 // Rewritten in Rust by RC Chuah-(RaynerSec)
