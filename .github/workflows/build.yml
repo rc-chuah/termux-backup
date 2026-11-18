@@ -145,6 +145,11 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Check Rust documentation
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps --all-features
+
       - name: Install SARIF tools
         uses: taiki-e/install-action@v2
         with:
