@@ -605,16 +605,33 @@ fn restore() -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn make_dir_accessible(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = fs::symlink_metadata(dir) {
+        let mode = meta.permissions().mode();
+        if (mode & 0o700) != 0o700 {
+            let _ = fs::set_permissions(dir, fs::Permissions::from_mode(mode | 0o700));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn make_dir_accessible(_dir: &Path) {}
+
 fn remove_path(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.is_dir() {
-        fs::remove_dir_all(path)
+        make_dir_accessible(path);
+        remove_dir_contents(path)?;
+        fs::remove_dir(path)
     } else {
         fs::remove_file(path)
     }
 }
 
 fn remove_dir_contents(dir: &Path) -> io::Result<()> {
+    make_dir_accessible(dir);
     for entry in fs::read_dir(dir)? {
         remove_path(&entry?.path())?;
     }
@@ -727,5 +744,25 @@ mod tests {
 
         assert_eq!(out, payload);
         assert_eq!(bar.current_bytes, payload.len() as u64);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_remove_dir_contents_with_readonly_subdir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp_test_dir("termux_backup_chmod_cleanup");
+        let readonly_sub = dir.join("go_pkg_mod");
+        fs::create_dir_all(&readonly_sub).unwrap();
+        let nested_file = readonly_sub.join("module.go");
+        fs::write(&nested_file, b"package mod").unwrap();
+
+        // Simulate read-only directory (0500 / r-x------) like Go module caches
+        fs::set_permissions(&readonly_sub, fs::Permissions::from_mode(0o500)).unwrap();
+
+        remove_dir_contents(&dir).unwrap();
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
