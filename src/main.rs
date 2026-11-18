@@ -27,12 +27,24 @@ enum SessionMode {
     Failsafe,
 }
 
+fn format_size(bytes: u64) -> String {
+    const MB: f64 = 1_048_576.0;
+    const GB: f64 = 1_073_741_824.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB)
+    } else {
+        format!("{:.1} MB", b / MB)
+    }
+}
+
 struct ProgressBar {
     label: &'static str,
     total_bytes: u64,
     current_bytes: u64,
     start: Instant,
     last_draw: Instant,
+    drawn: bool,
 }
 
 impl ProgressBar {
@@ -44,6 +56,7 @@ impl ProgressBar {
             current_bytes: 0,
             start: now,
             last_draw: now - Duration::from_secs(1),
+            drawn: false,
         };
         bar.render(true);
         bar
@@ -72,16 +85,19 @@ impl ProgressBar {
 
         let elapsed = self.start.elapsed().as_secs_f64().max(0.001);
         let speed_mb = (self.current_bytes as f64 / 1_048_576.0) / elapsed;
-        let cur_mb = self.current_bytes as f64 / 1_048_576.0;
+
+        if self.drawn {
+            print!("\r\x1B[2K\x1B[1A\r\x1B[2K");
+        }
+        self.drawn = true;
 
         if self.total_bytes > 0 {
             let clamped = self.current_bytes.min(self.total_bytes);
             let ratio = clamped as f64 / self.total_bytes as f64;
             let pct = (ratio * 100.0).min(100.0);
-            let width = 24usize;
+            let width = 18usize;
             let filled = ((ratio * width as f64).round() as usize).min(width);
             let bar = format!("{}{}", "█".repeat(filled), "░".repeat(width - filled));
-            let tot_mb = self.total_bytes as f64 / 1_048_576.0;
 
             let eta_secs = if clamped > 0 && clamped < self.total_bytes {
                 let remaining = (self.total_bytes - clamped) as f64;
@@ -91,22 +107,18 @@ impl ProgressBar {
                 0
             };
 
+            println!("{}: [{}] {:5.1}%", self.label, bar, pct);
             print!(
-                "\r\x1B[2K{}: [{}] {:5.1}% ({:.1}/{:.1} MB | {:.1} MB/s | ETA {:02}:{:02})",
-                self.label,
-                bar,
-                pct,
-                cur_mb,
-                tot_mb,
+                "{}/{} | {:.1} MB/s | ETA {:02}:{:02}",
+                format_size(clamped),
+                format_size(self.total_bytes),
                 speed_mb,
                 eta_secs / 60,
                 eta_secs % 60
             );
         } else {
-            print!(
-                "\r\x1B[2K{}: {:.1} MB ({:.1} MB/s)",
-                self.label, cur_mb, speed_mb
-            );
+            println!("{}: {}", self.label, format_size(self.current_bytes));
+            print!("Speed: {:.1} MB/s", speed_mb);
         }
         let _ = io::stdout().flush();
     }
