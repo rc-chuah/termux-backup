@@ -123,6 +123,7 @@ All release `.deb` and `.tar.gz` archives include SHA256 checksums and [GitHub A
 ### Notes
 - Backup only works in a normal Termux session.
 - Restore works in both normal and failsafe sessions.
+- Backups are 100% non-destructive and preserve shell history files (`.bash_history`) intact.
 - Backups and their `.sha256` checksum files are stored at `/storage/emulated/0/termux/backups`.
 - When prompted for a backup name, leaving it blank defaults to `termux-YYYYMMDD-HHMMSS.tar.gz` (UTC), while custom names automatically append `.tar.gz` if `.tar.gz` or `.tgz` is omitted.
 - SHA-256 checksum calculation, backup compression, and archive restoration display a live progress bar with percentage, `MB/s` speed, and ETA.
