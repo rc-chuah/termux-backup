@@ -370,20 +370,6 @@ fn check_backup_dir() -> io::Result<()> {
     }
 }
 
-fn clean_history() {
-    println!("Start Cleaning");
-    let termux_history = Path::new(TERMUX_ROOT).join("files/home/.bash_history");
-    let debian_history = Path::new(TERMUX_ROOT).join("files/home/debian-fs/root/.bash_history");
-    if termux_history.is_file() {
-        println!("Clean Termux Bash History");
-        let _ = fs::remove_file(&termux_history);
-    }
-    if debian_history.is_file() {
-        println!("Clean Debian Bash History");
-        let _ = fs::remove_file(&debian_history);
-    }
-}
-
 fn calculate_dir_bytes(src_dir: &Path) -> io::Result<u64> {
     let mut total = 0u64;
     for entry in fs::read_dir(src_dir)? {
@@ -479,7 +465,6 @@ fn backup(session: SessionMode) -> io::Result<()> {
 
     clear_screen();
     println!("Will Create {}", name);
-    clean_history();
     println!("Scanning Files...");
 
     let backup_path = Path::new(BACKUP_DIR).join(&name);
