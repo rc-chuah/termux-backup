@@ -52,9 +52,9 @@
 //! ```
 //!
 //! Follow the on-screen prompts to select:
-//! 1. **Backup** — Archive `home` and `usr` into `/storage/emulated/0/termux/backups` (defaults to `termux-YYYYMMDD-HHMMSS.tar.gz` in UTC).
-//! 2. **Restore** — Verify `.sha256` checksum, clean `/data/data/com.termux/files`, and unpack a chosen archive back into Termux.
-//! 3. **Exit Menu** — Quit the program.
+//! 1. **Backup** - Archive `home` and `usr` into `/storage/emulated/0/termux/backups` (defaults to `termux-YYYYMMDD-HHMMSS.tar.gz` in UTC).
+//! 2. **Restore** - Verify `.sha256` checksum, clean `/data/data/com.termux/files`, and unpack a chosen archive back into Termux.
+//! 3. **Exit Menu** - Quit the program.
 
 // termux-backup - Rust rewrite
 // Original bash script by Zongou
