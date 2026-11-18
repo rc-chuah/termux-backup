@@ -2,7 +2,6 @@
 
 [![Build & Analyze](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rc-chuah/termux-backup/actions/workflows/build.yml)
 [![Crates.io Version](https://img.shields.io/crates/v/termux-backup.svg)](https://crates.io/crates/termux-backup)
-[![docs.rs](https://img.shields.io/docsrs/termux-backup)](https://docs.rs/termux-backup)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://github.com/rc-chuah/termux-backup/blob/main/LICENSE)
 
 A Rust program to backup and restore your Termux home and sysroot directories.
@@ -15,25 +14,6 @@ A Rust program to backup and restore your Termux home and sysroot directories.
 
 ## Usage
 ### How To Use termux-backup
-
-#### Install from GitHub Releases (`.deb`)
-1. Download and install the latest `.deb` package for your architecture:
-   ```bash
-   ARCH=$(dpkg --print-architecture)
-   VERSION=$(curl -sL https://api.github.com/repos/rc-chuah/termux-backup/releases/latest | grep -Po '"tag_name": "\K[^"]*')
-   DEB_VERSION="${VERSION#v}"
-   curl -LO "https://github.com/rc-chuah/termux-backup/releases/download/${VERSION}/termux-backup_${DEB_VERSION}_${ARCH}.deb"
-   pkg install ./termux-backup_${DEB_VERSION}_${ARCH}.deb -y
-   rm -f termux-backup_${DEB_VERSION}_${ARCH}.deb
-   ```
-   Or download it directly from [GitHub Releases](https://github.com/rc-chuah/termux-backup/releases/latest) and run:
-   ```bash
-   pkg install ./termux-backup_*.deb
-   ```
-2. Run the program:
-   ```bash
-   termux-backup
-   ```
 
 #### Install from GitHub Releases (`.tar.gz`)
 1. Download and extract the latest `.tar.gz` archive for your architecture:
@@ -102,21 +82,15 @@ A Rust program to backup and restore your Termux home and sysroot directories.
    ```
 
 #### Verify Release Artifacts
-All release `.deb` and `.tar.gz` archives include SHA256 checksums and [GitHub Artifact Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
+All release `.tar.gz` archives include SHA256 checksums and [GitHub Artifact Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
 
 1. Verify build provenance using [GitHub CLI](https://github.com/cli/cli) (`pkg install gh` in Termux):
    ```bash
-   # Verify .deb package
-   gh attestation verify termux-backup_<version>_<arch>.deb --repo rc-chuah/termux-backup
-
    # Verify .tar.gz archive
    gh attestation verify termux-backup-<version>-<target>.tar.gz --repo rc-chuah/termux-backup
    ```
 2. Or verify the SHA256 checksum:
    ```bash
-   # Verify .deb checksum
-   sha256sum -c termux-backup_<version>_<arch>.deb.sha256
-
    # Verify .tar.gz checksum
    sha256sum -c termux-backup-<version>-<target>.tar.gz.sha256
    ```
