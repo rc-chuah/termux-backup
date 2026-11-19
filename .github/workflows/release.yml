@@ -113,13 +113,29 @@ jobs:
             artifacts/*.tar.gz
 
       - name: Scan release artifacts on VirusTotal
+        id: vt
         uses: crazy-max/ghaction-virustotal@v5
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
           request_rate: 4
           files: |
             artifacts/*.tar.gz
-          update_release_body: true
+
+      - name: Append VirusTotal links to GitHub Release
+        if: steps.vt.outputs.analysis != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VT_ANALYSIS: ${{ steps.vt.outputs.analysis }}
+        run: |
+          CURRENT_BODY=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          VT_SECTION=$'\n\n### 🛡️ VirusTotal Analysis\n'
+          IFS=',' read -ra ITEMS <<< "$VT_ANALYSIS"
+          for item in "${ITEMS[@]}"; do
+            FILE="${item%%=*}"
+            URL="${item#*=}"
+            VT_SECTION+=$'\n'"- \`${FILE}\`: ${URL}"
+          done
+          gh release edit "$GITHUB_REF_NAME" --notes "${CURRENT_BODY}${VT_SECTION}"
 
   publish_crates_io:
     name: Publish to crates.io
