@@ -127,15 +127,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VT_ANALYSIS: ${{ steps.vt.outputs.analysis }}
         run: |
-          CURRENT_BODY=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          CURRENT_BODY=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
           VT_SECTION=$'\n\n### 🛡️ VirusTotal Analysis\n'
           IFS=',' read -ra ITEMS <<< "$VT_ANALYSIS"
           for item in "${ITEMS[@]}"; do
-            FILE="${item%%=*}"
+            FILE=$(basename "${item%%=*}")
             URL="${item#*=}"
             VT_SECTION+=$'\n'"- \`${FILE}\`: ${URL}"
           done
-          gh release edit "$GITHUB_REF_NAME" --notes "${CURRENT_BODY}${VT_SECTION}"
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes "${CURRENT_BODY}${VT_SECTION}"
 
   publish_crates_io:
     name: Publish to crates.io
